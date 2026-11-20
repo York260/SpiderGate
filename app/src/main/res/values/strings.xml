@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="a11y_desc">守門員會偵測你打開的 App 和瀏覽器網址。碰到黑名單就攔下來，要先說服守門員才能使用。</string>
+</resources>
