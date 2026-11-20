@@ -1,4 +1,4 @@
-# 守門員 Gatekeeper
+# SpiderGate 守門員
 
 打開黑名單上的 App 或網站時，守門員會把你攔下來。要先說服守門員 AI（Claude）才能使用。
 
