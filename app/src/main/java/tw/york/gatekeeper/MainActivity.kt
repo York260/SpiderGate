@@ -77,31 +77,37 @@ class MainActivity : Activity() {
             toast("已儲存")
         }
 
-        section(col, "黑名單（只能加，不能刪）")
+        section(col, "名單（只能加，不能刪）")
         lists = TextView(this).apply { textSize = 14f }
         col.addView(lists)
         val addEdit = EditText(this).apply { hint = "App 套件名、網域或關鍵字" }
         col.addView(addEdit)
-        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        fun add(label: String, action: (String) -> Boolean) {
-            row.addView(Button(this).apply {
-                text = label
-                setOnClickListener {
-                    val v = addEdit.text.toString()
-                    if (action(v)) {
-                        addEdit.setText("")
-                        toast("已加入")
-                        refresh()
-                    } else {
-                        toast("空白或已經在清單裡")
+        fun addRow(vararg items: Pair<String, (String) -> Boolean>) {
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            for ((label, action) in items) {
+                row.addView(Button(this).apply {
+                    text = label
+                    setOnClickListener {
+                        if (action(addEdit.text.toString())) {
+                            addEdit.setText("")
+                            toast("已加入")
+                            refresh()
+                        } else {
+                            toast("空白或已經在清單裡")
+                        }
                     }
-                }
-            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            }
+            col.addView(row)
         }
-        add("加 App") { store.addApp(it) }
-        add("加網站") { store.addSite(it) }
-        add("加關鍵字") { store.addKeyword(it) }
-        col.addView(row)
+        col.addView(TextView(this).apply { text = "許可制（講理由才開）" })
+        addRow("加 App" to { v: String -> store.addPermitApp(v) }, "加網站" to { v: String -> store.addPermitSite(v) })
+        col.addView(TextView(this).apply { text = "絕對禁止（怎麼說都不開）" })
+        addRow(
+            "加 App" to { v: String -> store.addBanApp(v) },
+            "加網站" to { v: String -> store.addBanSite(v) },
+            "加關鍵字" to { v: String -> store.addBanKeyword(v) }
+        )
 
         section(col, "測試")
         button(col, "跟守門員談談") {
@@ -115,27 +121,34 @@ class MainActivity : Activity() {
     }
 
     private fun refresh() {
-        val state = when {
-            store.isAllowedNow() -> "放行中，還剩 ${Store.minutesLeft(store.allowUntil)} 分鐘"
-            store.inCooldown() -> "冷卻中，還要 ${Store.minutesLeft(store.cooldownUntil)} 分鐘"
-            else -> "鎖定中"
-        }
+        val allows = store.activeAllowances()
         status.text = buildString {
             appendLine("無障礙服務：${if (a11yOn()) "已開啟" else "未開啟（守門員沒在運作）"}")
             appendLine("裝置管理員：${if (adminOn()) "已啟用" else "未啟用"}")
             appendLine("API 金鑰：${if (store.apiKey.isNotBlank()) "已設定" else "未設定"}")
             appendLine("今天放行：${store.unlocksToday()} / ${Rules.MAX_UNLOCKS_PER_DAY} 次")
-            append("目前：$state")
+            if (store.inCooldown()) appendLine("冷卻中，還要 ${Store.minutesLeft(store.cooldownUntil)} 分鐘")
+            if (allows.isEmpty()) {
+                append("目前：全部鎖定中")
+            } else {
+                append("目前放行：")
+                allows.forEach { (k, until) -> append("\n・$k 還剩 ${Store.minutesLeft(until)} 分鐘") }
+            }
         }
         lists.text = buildString {
+            appendLine("【許可制】")
             appendLine("App：")
-            store.apps().sorted().forEach { appendLine("・$it") }
-            appendLine()
+            store.permitApps().sorted().forEach { appendLine("・$it") }
             appendLine("網站：")
-            store.sites().sorted().forEach { appendLine("・$it") }
+            store.permitSites().sorted().forEach { appendLine("・$it") }
             appendLine()
+            appendLine("【絕對禁止】")
+            appendLine("App：")
+            store.banApps().sorted().forEach { appendLine("・$it") }
+            appendLine("網站：")
+            store.banSites().sorted().forEach { appendLine("・$it") }
             appendLine("關鍵字：")
-            store.keywords().sorted().forEach { appendLine("・$it") }
+            store.banKeywords().sorted().forEach { appendLine("・$it") }
         }
     }
 

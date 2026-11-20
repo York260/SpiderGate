@@ -7,14 +7,15 @@ import java.util.Locale
 
 /** 寫死的規則：AI 改不了這些。 */
 object Rules {
-    const val MAX_MINUTES = 10
-    const val MAX_UNLOCKS_PER_DAY = 3
+    const val MAX_MINUTES = 30
+    const val MAX_UNLOCKS_PER_DAY = 5
     const val COOLDOWN_MINUTES = 15
     const val MAX_ROUNDS = 6
 }
 
 object Defaults {
-    val APPS = setOf(
+    // ---- 許可制：說得出正當理由＋預估時間，就開指定的那一個 ----
+    val PERMIT_APPS = setOf(
         "com.google.android.youtube",
         "com.zhiliaoapp.musically",      // TikTok
         "com.ss.android.ugc.trill",      // TikTok（亞洲）
@@ -24,11 +25,24 @@ object Defaults {
         "tv.danmaku.bili",               // Bilibili
         "com.bilibili.app.in"            // Bilibili 國際版
     )
-    val SITES = setOf(
+    val PERMIT_SITES = setOf(
         "youtube.com", "youtu.be", "tiktok.com", "douyin.com",
         "instagram.com", "facebook.com", "bilibili.com"
     )
-    val KEYWORDS = setOf("短劇", "短剧", "drama", "ai劇", "ai剧")
+
+    // ---- 絕對禁止：小說、各種劇，怎麼說都不開 ----
+    val BAN_APPS = setOf(
+        "com.dragon.read",               // 番茄小說
+        "com.qidian.qdreader",           // 起點讀書
+        "com.newleaf.app.android.victor", // ReelShort
+        "com.storymatrix.drama",         // DramaBox
+        "com.phoenix.read"               // 紅果短劇
+    )
+    val BAN_SITES = setOf("reelshort.com", "dramabox")
+    val BAN_KEYWORDS = setOf(
+        "短劇", "短剧", "ai劇", "ai剧", "追劇", "追剧", "微短劇", "微短剧",
+        "小說", "小说", "網文", "网文", "drama", "novel"
+    )
 }
 
 class Store(context: Context) {
@@ -42,13 +56,18 @@ class Store(context: Context) {
         get() = p.getString("model", DEFAULT_MODEL) ?: DEFAULT_MODEL
         set(v) { p.edit().putString("model", v.trim().ifEmpty { DEFAULT_MODEL }).apply() }
 
-    // ---- 黑名單：只能加，不能刪 ----
-    fun apps(): Set<String> = getSet("apps", Defaults.APPS)
-    fun sites(): Set<String> = getSet("sites", Defaults.SITES)
-    fun keywords(): Set<String> = getSet("keywords", Defaults.KEYWORDS)
-    fun addApp(v: String) = addTo("apps", Defaults.APPS, v)
-    fun addSite(v: String) = addTo("sites", Defaults.SITES, v)
-    fun addKeyword(v: String) = addTo("keywords", Defaults.KEYWORDS, v)
+    // ---- 名單：只能加，不能刪 ----
+    fun permitApps() = getSet("permitApps", Defaults.PERMIT_APPS)
+    fun permitSites() = getSet("permitSites", Defaults.PERMIT_SITES)
+    fun banApps() = getSet("banApps", Defaults.BAN_APPS)
+    fun banSites() = getSet("banSites", Defaults.BAN_SITES)
+    fun banKeywords() = getSet("banKeywords", Defaults.BAN_KEYWORDS)
+
+    fun addPermitApp(v: String) = addTo("permitApps", Defaults.PERMIT_APPS, v)
+    fun addPermitSite(v: String) = addTo("permitSites", Defaults.PERMIT_SITES, v)
+    fun addBanApp(v: String) = addTo("banApps", Defaults.BAN_APPS, v)
+    fun addBanSite(v: String) = addTo("banSites", Defaults.BAN_SITES, v)
+    fun addBanKeyword(v: String) = addTo("banKeywords", Defaults.BAN_KEYWORDS, v)
 
     private fun getSet(key: String, def: Set<String>): Set<String> =
         HashSet(p.getStringSet(key, def) ?: def)
@@ -62,32 +81,47 @@ class Store(context: Context) {
         return added
     }
 
-    /** 回傳命中的網站或關鍵字；沒命中回傳 null。 */
-    fun matchUrl(raw: String): String? {
-        val u = raw.lowercase()
-        sites().firstOrNull { u.contains(it) }?.let { return it }
-        keywords().firstOrNull { u.contains(it) }?.let { return "關鍵字「$it」" }
+    /** 網址或畫面文字有沒有碰到絕對禁止；有就回傳命中的字。 */
+    fun matchBan(text: String): String? {
+        val t = text.lowercase()
+        banSites().firstOrNull { t.contains(it) }?.let { return it }
+        banKeywords().firstOrNull { t.contains(it) }?.let { return it }
         return null
     }
 
-    // ---- 放行與冷卻 ----
-    val allowUntil: Long get() = p.getLong("allowUntil", 0L)
-    val cooldownUntil: Long get() = p.getLong("cooldownUntil", 0L)
+    /** 網址屬於哪個許可制網站；不屬於回傳 null。 */
+    fun matchPermitSite(url: String): String? {
+        val u = url.lowercase()
+        return permitSites().firstOrNull { u.contains(it) }
+    }
 
-    fun isAllowedNow() = System.currentTimeMillis() < allowUntil
+    // ---- 放行（針對單一對象）與冷卻 ----
+    fun allowUntil(key: String): Long = p.getLong("allow_$key", 0L)
+    fun isAllowed(key: String) = System.currentTimeMillis() < allowUntil(key)
+    fun revoke(key: String) { p.edit().remove("allow_$key").apply() }
+
+    /** 目前有放行中的對象（給設定畫面顯示）。 */
+    fun activeAllowances(): Map<String, Long> {
+        val now = System.currentTimeMillis()
+        return p.all.filterKeys { it.startsWith("allow_") }
+            .mapNotNull { (k, v) -> (v as? Long)?.takeIf { it > now }?.let { k.removePrefix("allow_") to it } }
+            .toMap()
+    }
+
+    val cooldownUntil: Long get() = p.getLong("cooldownUntil", 0L)
     fun inCooldown() = System.currentTimeMillis() < cooldownUntil
 
     fun unlocksToday(): Int =
         if (p.getString("day", "") == today()) p.getInt("unlocks", 0) else 0
 
     /** 程式最後把關：超過次數就不放行。 */
-    fun grant(minutes: Int): Boolean {
+    fun grant(key: String, minutes: Int): Boolean {
         if (unlocksToday() >= Rules.MAX_UNLOCKS_PER_DAY) return false
         val m = minutes.coerceIn(1, Rules.MAX_MINUTES)
         p.edit()
             .putString("day", today())
             .putInt("unlocks", unlocksToday() + 1)
-            .putLong("allowUntil", System.currentTimeMillis() + m * 60_000L)
+            .putLong("allow_$key", System.currentTimeMillis() + m * 60_000L)
             .apply()
         return true
     }

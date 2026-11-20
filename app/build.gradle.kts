@@ -11,8 +11,8 @@ android {
         applicationId = "tw.york.gatekeeper"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
     }
 
     // 固定簽章：之後的新版才能直接覆蓋安裝

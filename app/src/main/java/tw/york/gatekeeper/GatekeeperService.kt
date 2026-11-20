@@ -7,7 +7,12 @@ import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 
-/** 偵測前景 App 與瀏覽器網址，碰到黑名單就攔下來、叫出守門員。 */
+/**
+ * 兩層把關：
+ * 1. 絕對禁止：小說、劇類 App／網站／關鍵字，直接踢出去，不談。
+ * 2. 許可制：其他黑名單對象要先說服守門員；放行只開「那一個」，時間到自動鎖回。
+ *    放行期間也會掃畫面，一出現禁止內容（例如在 YouTube 點開短劇）照樣踢出去。
+ */
 class GatekeeperService : AccessibilityService() {
 
     private lateinit var store: Store
@@ -15,11 +20,10 @@ class GatekeeperService : AccessibilityService() {
     private var lastContentCheck = 0L
     private var lastGateLaunch = 0L
 
-    // 每 20 秒檢查一次：放行時間到了，就算你還停在影片裡也會被趕出來
     private val tick = object : Runnable {
         override fun run() {
             checkCurrentWindow()
-            handler.postDelayed(this, 20_000)
+            handler.postDelayed(this, 15_000)
         }
     }
 
@@ -27,7 +31,7 @@ class GatekeeperService : AccessibilityService() {
         super.onServiceConnected()
         store = Store(this)
         handler.removeCallbacks(tick)
-        handler.postDelayed(tick, 20_000)
+        handler.postDelayed(tick, 15_000)
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -35,7 +39,7 @@ class GatekeeperService : AccessibilityService() {
         val pkg = event.packageName?.toString() ?: return
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
             val now = System.currentTimeMillis()
-            if (now - lastContentCheck < 800) return
+            if (now - lastContentCheck < 1000) return
             lastContentCheck = now
         }
         evaluate(pkg)
@@ -43,21 +47,64 @@ class GatekeeperService : AccessibilityService() {
 
     private fun checkCurrentWindow() {
         if (!::store.isInitialized) return
-        val root = rootInActiveWindow ?: return
-        val pkg = root.packageName?.toString() ?: return
+        val pkg = rootInActiveWindow?.packageName?.toString() ?: return
         evaluate(pkg)
     }
 
     private fun evaluate(pkg: String) {
         if (pkg == packageName) return
-        if (store.isAllowedNow()) return
 
-        val target: String? = when {
-            pkg in store.apps() -> appLabel(pkg)
-            BROWSERS.containsKey(pkg) -> readUrl(pkg)?.let { store.matchUrl(it) }
-            else -> null
+        // 1. 絕對禁止的 App
+        if (pkg.lowercase() in store.banApps()) {
+            kick(GateActivity.MODE_BAN, appLabel(pkg), pkg)
+            return
         }
-        if (target != null) block(target)
+
+        // 2. 瀏覽器：看網址
+        if (BROWSERS.containsKey(pkg)) {
+            val url = readUrl(pkg) ?: return
+            store.matchBan(url)?.let { hit ->
+                kick(GateActivity.MODE_BAN, "含有「$hit」的網頁", hit)
+                return
+            }
+            val site = store.matchPermitSite(url) ?: return
+            if (store.isAllowed(site)) {
+                scanScreenForBan(site)
+            } else {
+                kick(GateActivity.MODE_PERMIT, site, site)
+            }
+            return
+        }
+
+        // 3. 許可制 App
+        if (pkg.lowercase() in store.permitApps()) {
+            if (store.isAllowed(pkg)) {
+                scanScreenForBan(pkg)
+            } else {
+                kick(GateActivity.MODE_PERMIT, appLabel(pkg), pkg)
+            }
+        }
+    }
+
+    /** 放行中也要掃畫面：看到禁止內容就收回放行、踢出去。 */
+    private fun scanScreenForBan(key: String) {
+        val root = rootInActiveWindow ?: return
+        val sb = StringBuilder()
+        collectText(root, sb, intArrayOf(0))
+        val hit = store.matchBan(sb.toString()) ?: return
+        store.revoke(key)
+        kick(GateActivity.MODE_BAN, "畫面上的「$hit」內容", hit)
+    }
+
+    private fun collectText(node: AccessibilityNodeInfo, sb: StringBuilder, count: IntArray) {
+        if (count[0] > 500) return
+        count[0]++
+        node.text?.let { sb.append(it).append('\n') }
+        node.contentDescription?.let { sb.append(it).append('\n') }
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            collectText(child, sb, count)
+        }
     }
 
     private fun readUrl(pkg: String): String? {
@@ -78,14 +125,16 @@ class GatekeeperService : AccessibilityService() {
         pkg
     }
 
-    private fun block(target: String) {
+    private fun kick(mode: String, label: String, key: String) {
         performGlobalAction(GLOBAL_ACTION_HOME)
         val now = System.currentTimeMillis()
         if (now - lastGateLaunch < 1500) return
         lastGateLaunch = now
         val i = Intent(this, GateActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            .putExtra(GateActivity.EXTRA_TARGET, target)
+            .putExtra(GateActivity.EXTRA_MODE, mode)
+            .putExtra(GateActivity.EXTRA_TARGET, label)
+            .putExtra(GateActivity.EXTRA_KEY, key)
         startActivity(i)
     }
 
