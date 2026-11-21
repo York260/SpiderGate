@@ -1,11 +1,14 @@
 package tw.york.gatekeeper
 
+import android.Manifest
 import android.app.Activity
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.text.InputType
@@ -50,6 +53,13 @@ class MainActivity : Activity() {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         }
         button(col, "2. 啟用裝置管理員（防止被解除安裝）") { requestAdmin() }
+        button(col, "3. 允許計步器（運動獎勵用來查證）") {
+            if (Build.VERSION.SDK_INT >= 29) {
+                requestPermissions(arrayOf(Manifest.permission.ACTIVITY_RECOGNITION), 1)
+            } else {
+                toast("這支手機不用另外授權")
+            }
+        }
 
         section(col, "Claude API 金鑰")
         keyEdit = EditText(this).apply {
@@ -126,7 +136,9 @@ class MainActivity : Activity() {
             appendLine("無障礙服務：${if (a11yOn()) "已開啟" else "未開啟（守門員沒在運作）"}")
             appendLine("裝置管理員：${if (adminOn()) "已啟用" else "未啟用"}")
             appendLine("API 金鑰：${if (store.apiKey.isNotBlank()) "已設定" else "未設定"}")
+            appendLine("計步器：${if (stepsOk()) "已允許" else "未允許"}")
             appendLine("今天放行：${store.unlocksToday()} / ${Rules.MAX_UNLOCKS_PER_DAY} 次")
+            appendLine("今天運動獎勵：${store.exerciseGrantsToday()} / ${Rules.MAX_EXERCISE_GRANTS_PER_DAY} 次")
             if (store.inCooldown()) appendLine("冷卻中，還要 ${Store.minutesLeft(store.cooldownUntil)} 分鐘")
             if (allows.isEmpty()) {
                 append("目前：全部鎖定中")
@@ -150,6 +162,15 @@ class MainActivity : Activity() {
             appendLine("關鍵字：")
             store.banKeywords().sorted().forEach { appendLine("・$it") }
         }
+    }
+
+    private fun stepsOk(): Boolean =
+        Build.VERSION.SDK_INT < 29 ||
+            checkSelfPermission(Manifest.permission.ACTIVITY_RECOGNITION) == PackageManager.PERMISSION_GRANTED
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        refresh()
     }
 
     private fun a11yOn(): Boolean {

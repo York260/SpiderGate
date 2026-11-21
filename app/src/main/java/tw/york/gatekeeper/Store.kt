@@ -11,6 +11,10 @@ object Rules {
     const val MAX_UNLOCKS_PER_DAY = 5
     const val COOLDOWN_MINUTES = 15
     const val MAX_ROUNDS = 6
+
+    // 運動獎勵：邊運動邊聽小說
+    const val EXERCISE_MINUTES = 30
+    const val MAX_EXERCISE_GRANTS_PER_DAY = 4   // 最多連任到 2 小時
 }
 
 object Defaults {
@@ -129,6 +133,36 @@ class Store(context: Context) {
     fun deny() {
         p.edit().putLong("cooldownUntil", System.currentTimeMillis() + Rules.COOLDOWN_MINUTES * 60_000L).apply()
     }
+
+    // ---- 運動獎勵 ----
+    val exUntil: Long get() = p.getLong("exUntil", 0L)
+    val exStepsStart: Long get() = p.getLong("exStepsStart", -1L)
+    val exPaused: Boolean get() = p.getBoolean("exPaused", true)
+
+    fun exerciseGrantsToday(): Int =
+        if (p.getString("exDay", "") == today()) p.getInt("exCount", 0) else 0
+
+    /** 上一次運動放行是不是剛結束（30 分鐘內）＝這次算「連任」。 */
+    fun isRenewal(): Boolean {
+        val now = System.currentTimeMillis()
+        return exUntil in (now - 30 * 60_000L)..now
+    }
+
+    fun grantExercise(key: String, steps: Long): Boolean {
+        if (exerciseGrantsToday() >= Rules.MAX_EXERCISE_GRANTS_PER_DAY) return false
+        val until = System.currentTimeMillis() + Rules.EXERCISE_MINUTES * 60_000L
+        p.edit()
+            .putString("exDay", today())
+            .putInt("exCount", exerciseGrantsToday() + 1)
+            .putLong("allow_$key", until)
+            .putLong("exUntil", until)
+            .putLong("exStepsStart", steps)
+            .putBoolean("exPaused", false)
+            .apply()
+        return true
+    }
+
+    fun markExercisePaused() { p.edit().putBoolean("exPaused", true).apply() }
 
     private fun today() = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
 

@@ -2,6 +2,9 @@ package tw.york.gatekeeper
 
 import android.accessibilityservice.AccessibilityService
 import android.content.Intent
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.os.Handler
 import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
@@ -22,8 +25,9 @@ class GatekeeperService : AccessibilityService() {
 
     private val tick = object : Runnable {
         override fun run() {
+            stopAudioIfExerciseEnded()
             checkCurrentWindow()
-            handler.postDelayed(this, 15_000)
+            handler.postDelayed(this, 10_000)
         }
     }
 
@@ -45,6 +49,23 @@ class GatekeeperService : AccessibilityService() {
         evaluate(pkg)
     }
 
+    /** 運動獎勵時間到：搶音訊焦點，讓小說 App 暫停播放。 */
+    private fun stopAudioIfExerciseEnded() {
+        if (!::store.isInitialized) return
+        if (store.exPaused || System.currentTimeMillis() < store.exUntil) return
+        val am = getSystemService(AudioManager::class.java) ?: return
+        val req = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+            )
+            .build()
+        am.requestAudioFocus(req)
+        store.markExercisePaused()
+    }
+
     private fun checkCurrentWindow() {
         if (!::store.isInitialized) return
         val pkg = rootInActiveWindow?.packageName?.toString() ?: return
@@ -56,6 +77,7 @@ class GatekeeperService : AccessibilityService() {
 
         // 1. 絕對禁止的 App
         if (pkg.lowercase() in store.banApps()) {
+            if (store.isAllowed(pkg)) return   // 運動獎勵放行中
             kick(GateActivity.MODE_BAN, appLabel(pkg), pkg)
             return
         }
@@ -64,6 +86,7 @@ class GatekeeperService : AccessibilityService() {
         if (BROWSERS.containsKey(pkg)) {
             val url = readUrl(pkg) ?: return
             store.matchBan(url)?.let { hit ->
+                if (store.isAllowed(hit)) return
                 kick(GateActivity.MODE_BAN, "含有「$hit」的網頁", hit)
                 return
             }
@@ -92,6 +115,7 @@ class GatekeeperService : AccessibilityService() {
         val sb = StringBuilder()
         collectText(root, sb, intArrayOf(0))
         val hit = store.matchBan(sb.toString()) ?: return
+        if (store.isAllowed(hit)) return
         store.revoke(key)
         kick(GateActivity.MODE_BAN, "畫面上的「$hit」內容", hit)
     }
