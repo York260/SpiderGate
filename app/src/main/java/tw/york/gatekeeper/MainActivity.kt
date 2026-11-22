@@ -175,14 +175,10 @@ class MainActivity : Activity() {
     /** 選要用哪個 App 聽小說，再直接進守門員申請。 */
     private fun pickTarget(mode: String) {
         val source = if (mode == GateActivity.MODE_PERMIT) store.permitApps() else store.banApps() + store.permitApps()
-        val pkgs = source.mapNotNull { pkg ->
-            try {
-                val info = packageManager.getApplicationInfo(pkg, 0)
-                pkg to packageManager.getApplicationLabel(info).toString()
-            } catch (e: Exception) {
-                null   // 沒安裝的跳過
-            }
-        }.sortedBy { it.second }
+        val pkgs = packageManager.getInstalledApplications(0)
+            .filter { it.packageName.lowercase() in source }
+            .map { it.packageName to packageManager.getApplicationLabel(it).toString() }
+            .sortedBy { it.second }
         if (pkgs.isEmpty()) {
             toast("名單裡的 App 都沒安裝")
             return
