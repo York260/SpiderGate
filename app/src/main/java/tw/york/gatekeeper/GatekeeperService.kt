@@ -49,10 +49,10 @@ class GatekeeperService : AccessibilityService() {
         evaluate(pkg)
     }
 
-    /** 運動獎勵時間到：搶音訊焦點，讓小說 App 暫停播放。 */
+    /** 聽小說獎勵（運動／專車）時間到：搶音訊焦點，讓小說 App 暫停播放。 */
     private fun stopAudioIfExerciseEnded() {
         if (!::store.isInitialized) return
-        if (store.exPaused || System.currentTimeMillis() < store.exUntil) return
+        if (store.rewardPaused || System.currentTimeMillis() < store.rewardUntil) return
         val am = getSystemService(AudioManager::class.java) ?: return
         val req = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
             .setAudioAttributes(
@@ -63,7 +63,7 @@ class GatekeeperService : AccessibilityService() {
             )
             .build()
         am.requestAudioFocus(req)
-        store.markExercisePaused()
+        store.markRewardPaused()
     }
 
     private fun checkCurrentWindow() {

@@ -15,6 +15,9 @@ object Rules {
     // 運動獎勵：邊運動邊聽小說
     const val EXERCISE_MINUTES = 30
     const val MAX_EXERCISE_GRANTS_PER_DAY = 4   // 最多連任到 2 小時
+
+    // 搭返校專車：聽小說 1 小時，一天一次
+    const val COMMUTE_MINUTES = 60
 }
 
 object Defaults {
@@ -137,7 +140,9 @@ class Store(context: Context) {
     // ---- 運動獎勵 ----
     val exUntil: Long get() = p.getLong("exUntil", 0L)
     val exStepsStart: Long get() = p.getLong("exStepsStart", -1L)
-    val exPaused: Boolean get() = p.getBoolean("exPaused", true)
+    /** 任何「聽小說」獎勵（運動／專車）的結束時間，時間到要暫停播放。 */
+    val rewardUntil: Long get() = p.getLong("rewardUntil", 0L)
+    val rewardPaused: Boolean get() = p.getBoolean("rewardPaused", true)
 
     fun exerciseGrantsToday(): Int =
         if (p.getString("exDay", "") == today()) p.getInt("exCount", 0) else 0
@@ -157,12 +162,27 @@ class Store(context: Context) {
             .putLong("allow_$key", until)
             .putLong("exUntil", until)
             .putLong("exStepsStart", steps)
-            .putBoolean("exPaused", false)
+            .putLong("rewardUntil", until)
+            .putBoolean("rewardPaused", false)
             .apply()
         return true
     }
 
-    fun markExercisePaused() { p.edit().putBoolean("exPaused", true).apply() }
+    fun commuteUsedToday(): Boolean = p.getString("commuteDay", "") == today()
+
+    fun grantCommute(key: String): Boolean {
+        if (commuteUsedToday()) return false
+        val until = System.currentTimeMillis() + Rules.COMMUTE_MINUTES * 60_000L
+        p.edit()
+            .putString("commuteDay", today())
+            .putLong("allow_$key", until)
+            .putLong("rewardUntil", until)
+            .putBoolean("rewardPaused", false)
+            .apply()
+        return true
+    }
+
+    fun markRewardPaused() { p.edit().putBoolean("rewardPaused", true).apply() }
 
     private fun today() = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
 
