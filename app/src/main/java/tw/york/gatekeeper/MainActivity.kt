@@ -88,6 +88,9 @@ class MainActivity : Activity() {
             toast("已儲存")
         }
 
+        section(col, "申請使用")
+        button(col, "申請打開 App（講理由＋時間）") { pickTarget(GateActivity.MODE_PERMIT) }
+
         section(col, "申請聽小說")
         button(col, "我在運動，想邊動邊聽小說") { pickTarget(GateActivity.MODE_EXERCISE) }
         button(col, "我在搭返校專車，想聽小說 1 小時") { pickTarget(GateActivity.MODE_COMMUTE) }
@@ -171,7 +174,8 @@ class MainActivity : Activity() {
 
     /** 選要用哪個 App 聽小說，再直接進守門員申請。 */
     private fun pickTarget(mode: String) {
-        val pkgs = (store.banApps() + store.permitApps()).mapNotNull { pkg ->
+        val source = if (mode == GateActivity.MODE_PERMIT) store.permitApps() else store.banApps() + store.permitApps()
+        val pkgs = source.mapNotNull { pkg ->
             try {
                 val info = packageManager.getApplicationInfo(pkg, 0)
                 pkg to packageManager.getApplicationLabel(info).toString()
@@ -184,7 +188,7 @@ class MainActivity : Activity() {
             return
         }
         AlertDialog.Builder(this)
-            .setTitle("用哪個 App 聽小說？")
+            .setTitle(if (mode == GateActivity.MODE_PERMIT) "要打開哪個 App？" else "用哪個 App 聽小說？")
             .setItems(pkgs.map { it.second }.toTypedArray()) { _, which ->
                 val (pkg, label) = pkgs[which]
                 startActivity(

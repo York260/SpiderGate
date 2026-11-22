@@ -126,7 +126,7 @@ class GateActivity : Activity() {
             else -> {
                 val opening = "嘿，你想打開「$target」。沒問題，先跟我說兩件事：\n" +
                     "1. 要用它做什麼？\n2. 大概需要幾分鐘？\n\n" +
-                    "（如果是運動或搭返校專車時想聽小說，按上面的按鈕申請。）"
+                    "（如果是運動或搭返校專車時想聽小說，按上面的按鈕。）"
                 beginChat(opening)
             }
         }
