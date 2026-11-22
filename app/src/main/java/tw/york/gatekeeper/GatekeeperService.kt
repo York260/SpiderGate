@@ -111,6 +111,7 @@ class GatekeeperService : AccessibilityService() {
 
     /** 放行中也要掃畫面：看到禁止內容就收回放行、踢出去。 */
     private fun scanScreenForBan(key: String) {
+        if (store.rewardCovers(key)) return   // 運動／專車聽小說中
         val root = rootInActiveWindow ?: return
         val sb = StringBuilder()
         collectText(root, sb, intArrayOf(0))

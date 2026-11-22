@@ -137,6 +137,17 @@ class Store(context: Context) {
         p.edit().putLong("cooldownUntil", System.currentTimeMillis() + Rules.COOLDOWN_MINUTES * 60_000L).apply()
     }
 
+    // 運動／專車申請有自己的冷卻，不會被一般許可制的拒絕卡住
+    val rewardCooldownUntil: Long get() = p.getLong("rewardCooldownUntil", 0L)
+    fun inRewardCooldown() = System.currentTimeMillis() < rewardCooldownUntil
+    fun denyReward() {
+        p.edit().putLong("rewardCooldownUntil", System.currentTimeMillis() + Rules.COOLDOWN_MINUTES * 60_000L).apply()
+    }
+
+    /** 聽小說獎勵進行中、而且就是這個對象：放行期間不掃禁止關鍵字。 */
+    fun rewardCovers(key: String): Boolean =
+        System.currentTimeMillis() < rewardUntil && p.getString("rewardKey", "") == key
+
     // ---- 運動獎勵 ----
     val exUntil: Long get() = p.getLong("exUntil", 0L)
     val exStepsStart: Long get() = p.getLong("exStepsStart", -1L)
@@ -162,6 +173,7 @@ class Store(context: Context) {
             .putLong("allow_$key", until)
             .putLong("exUntil", until)
             .putLong("exStepsStart", steps)
+            .putString("rewardKey", key)
             .putLong("rewardUntil", until)
             .putBoolean("rewardPaused", false)
             .apply()
@@ -176,6 +188,7 @@ class Store(context: Context) {
         p.edit()
             .putString("commuteDay", today())
             .putLong("allow_$key", until)
+            .putString("rewardKey", key)
             .putLong("rewardUntil", until)
             .putBoolean("rewardPaused", false)
             .apply()
