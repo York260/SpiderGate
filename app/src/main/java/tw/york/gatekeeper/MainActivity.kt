@@ -2,6 +2,7 @@ package tw.york.gatekeeper
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Intent
@@ -87,6 +88,10 @@ class MainActivity : Activity() {
             toast("已儲存")
         }
 
+        section(col, "申請聽小說")
+        button(col, "我在運動，想邊動邊聽小說") { pickTarget(GateActivity.MODE_EXERCISE) }
+        button(col, "我在搭返校專車，想聽小說 1 小時") { pickTarget(GateActivity.MODE_COMMUTE) }
+
         section(col, "名單（只能加，不能刪）")
         lists = TextView(this).apply { textSize = 14f }
         col.addView(lists)
@@ -162,6 +167,35 @@ class MainActivity : Activity() {
             appendLine("關鍵字：")
             store.banKeywords().sorted().forEach { appendLine("・$it") }
         }
+    }
+
+    /** 選要用哪個 App 聽小說，再直接進守門員申請。 */
+    private fun pickTarget(mode: String) {
+        val pkgs = (store.banApps() + store.permitApps()).mapNotNull { pkg ->
+            try {
+                val info = packageManager.getApplicationInfo(pkg, 0)
+                pkg to packageManager.getApplicationLabel(info).toString()
+            } catch (e: Exception) {
+                null   // 沒安裝的跳過
+            }
+        }.sortedBy { it.second }
+        if (pkgs.isEmpty()) {
+            toast("名單裡的 App 都沒安裝")
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("用哪個 App 聽小說？")
+            .setItems(pkgs.map { it.second }.toTypedArray()) { _, which ->
+                val (pkg, label) = pkgs[which]
+                startActivity(
+                    Intent(this, GateActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        .putExtra(GateActivity.EXTRA_MODE, mode)
+                        .putExtra(GateActivity.EXTRA_TARGET, label)
+                        .putExtra(GateActivity.EXTRA_KEY, pkg)
+                )
+            }
+            .show()
     }
 
     private fun stepsOk(): Boolean =

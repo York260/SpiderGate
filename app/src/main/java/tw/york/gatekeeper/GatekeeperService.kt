@@ -160,7 +160,8 @@ class GatekeeperService : AccessibilityService() {
             .putExtra(GateActivity.EXTRA_MODE, mode)
             .putExtra(GateActivity.EXTRA_TARGET, label)
             .putExtra(GateActivity.EXTRA_KEY, key)
-        startActivity(i)
+        // 等「回桌面」動作做完再叫出守門員，不然守門員會被桌面蓋掉、看起來像直接跳掉
+        handler.postDelayed({ startActivity(i) }, 450)
     }
 
     override fun onInterrupt() {}

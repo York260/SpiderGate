@@ -56,7 +56,14 @@ class GateActivity : Activity() {
         readIntent(intent)
         buildUi()
         readSteps()
-        start()
+        route()
+    }
+
+    /** 從設定畫面直接申請運動／專車時，跳過攔截畫面。 */
+    private fun route() = when (mode) {
+        MODE_EXERCISE -> startExercise()
+        MODE_COMMUTE -> startCommute()
+        else -> start()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -65,10 +72,10 @@ class GateActivity : Activity() {
         val newMode = intent.getStringExtra(EXTRA_MODE) ?: MODE_PERMIT
         val newKey = intent.getStringExtra(EXTRA_KEY) ?: return
         if ((mode == MODE_EXERCISE || mode == MODE_COMMUTE) && rounds > 0) return   // 申請談到一半，不打斷
-        if (newMode == MODE_BAN || (rounds == 0 && !busy && newKey != key)) {
+        if (newMode == MODE_BAN || newMode == MODE_EXERCISE || newMode == MODE_COMMUTE || (rounds == 0 && !busy && newKey != key)) {
             readIntent(intent)
             readSteps()
-            start()
+            route()
         }
     }
 
