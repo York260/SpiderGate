@@ -220,7 +220,15 @@ class GateActivity : Activity() {
 
         var allow = ALLOW.find(reply)?.groupValues?.get(1)?.toIntOrNull()
         val denied = DENY.containsMatchIn(reply)
-        thinking.text = reply.replace(ALLOW, "").replace(DENY, "").trim()
+        val shown = reply.replace(ALLOW, "").replace(DENY, "").trim()
+        // AI 只回標記、沒講話時，補一句，不要留空白泡泡
+        thinking.text = shown.ifEmpty {
+            when {
+                allow != null -> "好，放行。"
+                denied -> "這次不行喔。"
+                else -> "（守門員沒說話，再跟它講一次試試。）"
+            }
+        }
         history.add("assistant" to reply)
 
         // 程式強制：運動獎勵至少要問滿 3 輪才可能放行

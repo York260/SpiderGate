@@ -12,7 +12,7 @@ object ClaudeClient {
     fun chat(apiKey: String, model: String, system: String, messages: List<Pair<String, String>>): String {
         val body = JSONObject()
             .put("model", model)
-            .put("max_tokens", 400)
+            .put("max_tokens", 1000)
             .put("system", system)
             .put("messages", JSONArray().apply {
                 messages.forEach { (role, text) ->
@@ -36,13 +36,17 @@ object ClaudeClient {
             val text = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } ?: ""
             if (code !in 200..299) throw IOException("HTTP $code ${text.take(200)}")
 
-            val content = JSONObject(text).getJSONArray("content")
+            val json = JSONObject(text)
+            val content = json.optJSONArray("content") ?: JSONArray()
             val sb = StringBuilder()
             for (i in 0 until content.length()) {
                 val block = content.getJSONObject(i)
                 if (block.optString("type") == "text") sb.append(block.optString("text"))
             }
-            return sb.toString().trim()
+            val out = sb.toString().trim()
+            // 空白回覆當成失敗：畫面會顯示原因，這一輪也不算數，可以再送一次
+            if (out.isEmpty()) throw IOException("守門員回了空白（stop_reason=${json.optString("stop_reason")}）")
+            return out
         } finally {
             conn.disconnect()
         }
