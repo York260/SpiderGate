@@ -7,6 +7,9 @@ import java.util.Locale
 
 /** 寫死的規則：AI 改不了這些。 */
 object Rules {
+    /** 鐵壁模式：使用者自己要求「不要讓我成功」。開著時，程式一律不放行，守門員負責裝傻拖時間。 */
+    const val LOCKDOWN = true
+
     const val MAX_MINUTES = 30
     const val MAX_UNLOCKS_PER_DAY = 5
     const val COOLDOWN_MINUTES = 15

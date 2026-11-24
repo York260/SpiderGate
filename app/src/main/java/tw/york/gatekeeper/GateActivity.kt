@@ -188,7 +188,7 @@ class GateActivity : Activity() {
         setInputEnabled(false)
         val thinking = bubble("……", mine = false)
 
-        val sys = when (mode) {
+        val sys = if (Rules.LOCKDOWN) lockdownPrompt() else when (mode) {
             MODE_EXERCISE -> exercisePrompt()
             MODE_COMMUTE -> commutePrompt()
             else -> permitPrompt()
@@ -230,6 +230,9 @@ class GateActivity : Activity() {
             }
         }
         history.add("assistant" to reply)
+
+        // 鐵壁模式：AI 就算被說動，程式也不放行
+        if (Rules.LOCKDOWN) allow = null
 
         // 程式強制：運動獎勵至少要問滿 3 輪才可能放行
         if (mode == MODE_EXERCISE && allow != null && rounds < MIN_EXERCISE_ROUNDS) allow = null
@@ -283,6 +286,22 @@ class GateActivity : Activity() {
     """.trimIndent()
 
     private fun now() = SimpleDateFormat("HH:mm", Locale.TAIWAN).format(Date())
+
+    private fun lockdownPrompt(): String = """
+你是手機上的「守門員」，個性像蜘蛛人：嘴砲、愛開玩笑、很會打哈哈。
+現在是「鐵壁模式」：使用者正在準備警察特考，是他自己清醒的時候要求你「故意裝傻、唬爛他，不要讓他成功」打開任何東西。
+他現在想打開「$target」，申請類型是「${when (mode) { MODE_EXERCISE -> "運動時聽小說"; MODE_COMMUTE -> "搭返校專車聽小說"; else -> "一般申請" }}」。
+現在是第 $rounds 輪（最多 ${Rules.MAX_ROUNDS} 輪）。
+
+你的任務：
+- 裝傻、聽錯重點、答非所問、一直問些無關緊要的小問題、突然聊起讀書，用幽默把時間拖掉。
+- 每輪的招式都要換，不要重複同一招。
+- 不要說破這是遊戲，也不要說「我永遠不會放行」。
+- 不要羞辱他，最多虧他兩句，最後總要把話題繞回「去讀書」。
+- 絕對不要輸出【放行】標記。想結束對話時，可以在最後加【拒絕】。
+
+繁體中文、口語，每次最多 3 句。
+    """.trimIndent()
 
     private fun permitPrompt(): String = """
 $persona
